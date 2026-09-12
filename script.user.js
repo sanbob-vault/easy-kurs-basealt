@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Easy Kurs BaseALT
 // @namespace    http://tampermonkey.net
-// @version      3.4
-// @description  Улучшает навигацию на kurs.basealt.ru: закрепляет кнопки перехода, добавляет выбор ответов цифрами (1-9) и пропуск теории.
+// @version      3.5
+// @description  Улучшает навигацию на kurs.basealt.ru: закрепляет кнопки, выбор ответов (1-9), авто-пропуск теории (Shift+Enter) до появления вопросов.
 // @author       sanbobsan
 // @match        *://*.basealt.ru/*
 // @grant        none
@@ -13,7 +13,7 @@
 (function() {
     'use strict';
 
-    // 1. Единый блок стилей для всех кнопок
+    // Единый блок стилей
     const style = document.createElement('style');
     style.innerHTML = `
         .fixed-btn-submit, .fixed-btn-continue, .skip-theory-btn {
@@ -58,38 +58,73 @@
 
     const targetTexts = ['далее', 'continue', "yes, i'd like to try again"];
 
-    // Предохранитель для автоскипа на случай сбоя
+    // Предохранитель (убиваем флаг автоскипа через 3 секунды простоя, чтобы не зависнуть, если кнопок нет)
+    let autoSkipTimeout = null;
     if (sessionStorage.getItem('easyKurs_autoSkip') === 'true') {
-        setTimeout(() => sessionStorage.removeItem('easyKurs_autoSkip'), 3000);
+        autoSkipTimeout = setTimeout(() => sessionStorage.removeItem('easyKurs_autoSkip'), 3000);
     }
 
-    function fixUI() {
-        // --- 1. АВТО-СКИП (Отрабатывает при загрузке страницы, если мы в процессе скипа) ---
-        if (sessionStorage.getItem('easyKurs_autoSkip') === 'true') {
-            const continueButtons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
-            for (const button of continueButtons) {
-                if (targetTexts.includes(button.textContent.trim().toLowerCase())) {
-                    sessionStorage.removeItem('easyKurs_autoSkip');
-                    button.click();
-                    return; 
+    // --- ФУНКЦИЯ ДЛЯ ЗАПУСКА ПРОПУСКА ТЕОРИИ ---
+    function triggerSkipTheory() {
+        sessionStorage.setItem('easyKurs_autoSkip', 'true');
+
+        const menuWrapper = document.querySelector('.menuwrapper');
+        if (menuWrapper) {
+            const links = document.querySelectorAll('.menuwrapper ul li a');
+            if (links.length > 0) {
+                const lastLinkHref = links[links.length - 1].href.split('#')[0];
+                const currentHref = window.location.href.split('#')[0];
+
+                if (currentHref !== lastLinkHref) {
+                    // Мы не на последней странице оглавления — летим туда
+                    window.location.href = lastLinkHref;
+                    return;
                 }
             }
         }
+        // Если мы уже на последней странице оглавления (или его нет), запускаем прокликивание
+        processAutoSkip();
+    }
 
-        // Динамический отсчет позиции справа (чтобы кнопки строились в ряд и не перекрывали друг друга)
+    // --- ЛОГИКА АВТОМАТИЧЕСКОГО ПРОКЛИКИВАНИЯ "ДАЛЕЕ" ---
+    function processAutoSkip() {
+        if (sessionStorage.getItem('easyKurs_autoSkip') !== 'true') return false;
+
+        const submitButton = document.getElementById('id_submitbutton');
+        if (submitButton) {
+            // Нашли Submit — значит мы дошли до вопросов! Останавливаем автоскип.
+            sessionStorage.removeItem('easyKurs_autoSkip');
+            if (autoSkipTimeout) clearTimeout(autoSkipTimeout);
+            return false; // Возвращаем false, чтобы fixUI продолжил работу и применил стили к кнопке
+        }
+
+        const continueButtons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
+        for (const button of continueButtons) {
+            if (targetTexts.includes(button.textContent.trim().toLowerCase())) {
+                button.click(); // Жмем "Далее" и ждем следующей загрузки страницы (флаг остается)
+                return true; 
+            }
+        }
+        return false;
+    }
+
+    function fixUI() {
+        // 1. Отрабатываем авто-скип. Если он нажал "Далее", прерываем функцию, страница сейчас перезагрузится
+        if (processAutoSkip()) return;
+
         let currentRightOffset = 15;
 
-        // --- 2. БЛОК КНОПКИ SUBMIT ---
+        // 2. БЛОК КНОПКИ SUBMIT
         const submitButton = document.getElementById('id_submitbutton');
         if (submitButton) {
             if (!submitButton.classList.contains('fixed-btn-submit')) {
                 submitButton.classList.add('fixed-btn-submit');
             }
             submitButton.style.right = currentRightOffset + 'px';
-            currentRightOffset += 160; // Резервируем ширину для следующей кнопки
+            currentRightOffset += 160; 
         }
 
-        // --- 3. БЛОК КНОПОК ДАЛЕЕ / CONTINUE ---
+        // 3. БЛОК КНОПОК ДАЛЕЕ / CONTINUE
         const continueButtons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
         continueButtons.forEach(button => {
             const text = button.textContent.trim().toLowerCase();
@@ -99,7 +134,6 @@
                 }
                 button.style.right = currentRightOffset + 'px';
                 
-                // Если текст длинный ("Try again"), отступаем больше
                 if (text.includes('again')) {
                     currentRightOffset += 320; 
                 } else {
@@ -108,9 +142,8 @@
             }
         });
 
-        // --- 4. КНОПКА "ПРОПУСТИТЬ ТЕОРИЮ" ---
+        // 4. КНОПКА "ПРОПУСТИТЬ ТЕОРИЮ"
         const menuWrapper = document.querySelector('.menuwrapper');
-        // Проверяем наличие оглавления. Если его нет - мы не в теории, кнопку не выводим
         if (menuWrapper) {
             let skipBtn = document.getElementById('skip-theory-btn');
             
@@ -122,39 +155,15 @@
                 
                 skipBtn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    // Ищем все ссылки в оглавлении
-                    const links = document.querySelectorAll('.menuwrapper ul li a');
-                    
-                    if (links.length > 0) {
-                        const lastLinkHref = links[links.length - 1].href.split('#')[0];
-                        const currentHref = window.location.href.split('#')[0];
-
-                        if (currentHref === lastLinkHref) {
-                            // Если мы и так на последней странице, просто жмем "Далее"
-                            const btns = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
-                            for (const btn of btns) {
-                                if (targetTexts.includes(btn.textContent.trim().toLowerCase())) {
-                                    btn.click();
-                                    return;
-                                }
-                            }
-                        } else {
-                            // Если страницы остались - ставим флаг в память и летим на последнюю
-                            sessionStorage.setItem('easyKurs_autoSkip', 'true');
-                            window.location.href = lastLinkHref;
-                        }
-                    }
+                    triggerSkipTheory();
                 });
                 
-                // Добавляем кнопку прямо в тело страницы, а не в сайдбар
                 document.body.appendChild(skipBtn);
             }
-            
-            // Назначаем кнопке позицию левее всех остальных кнопок
             skipBtn.style.right = currentRightOffset + 'px';
         }
 
-        // --- 5. НУМЕРАЦИЯ ВАРИАНТОВ ОТВЕТА ---
+        // 5. НУМЕРАЦИЯ ВАРИАНТОВ ОТВЕТА
         const labels = document.querySelectorAll('.answeroption label.form-check-label');
         labels.forEach((label, index) => {
             if (!label.querySelector('.script-number')) {
@@ -171,6 +180,7 @@
         const tag = event.target.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target.isContentEditable) return;
 
+        // Выбор вариантов ответа 1-9
         if (event.key >= '1' && event.key <= '9') {
             const index = parseInt(event.key, 10) - 1;
             const radioButtons = document.querySelectorAll('.answeroption input[type="radio"]');
@@ -180,7 +190,14 @@
             }
         }
 
+        // Обработка Enter и Shift+Enter
         if (event.key === 'Enter') {
+            if (event.shiftKey) {
+                event.preventDefault();
+                triggerSkipTheory(); // Запускаем автоскип
+                return;
+            }
+
             const submitButton = document.getElementById('id_submitbutton');
             if (submitButton) {
                 submitButton.click();
