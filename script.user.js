@@ -5,8 +5,8 @@
 // @description  Возврат к первому полностью рабочему варианту нумерации и горячих клавиш + Try again
 // @match        *://*.basealt.ru/*
 // @grant        none
-// @downloadURL  https://raw.githubusercontent.com/sanbob-vault/easy-kurs-basealt/refs/heads/main/script.js
-// @updateURL    https://raw.githubusercontent.com/sanbob-vault/easy-kurs-basealt/refs/heads/main/script.js
+// @downloadURL  https://raw.githubusercontent.com/sanbob-vault/easy-kurs-basealt/refs/heads/main/script.user.js
+// @updateURL    https://raw.githubusercontent.com/sanbob-vault/easy-kurs-basealt/refs/heads/main/script.user.js
 // ==/UserScript==
 
 (function() {
