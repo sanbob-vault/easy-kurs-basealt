@@ -1,8 +1,9 @@
 // ==UserScript==
-// @name         Фиксация кнопок Moodle + Enter (Классическая рабочая версия)
+// @name         BaseALT Easy Course Fixer
 // @namespace    http://tampermonkey.net
-// @version      3.0
-// @description  Возврат к первому полностью рабочему варианту нумерации и горячих клавиш + Try again
+// @version      3.2
+// @description  Улучшает навигацию на kurs.basealt.ru: закрепляет кнопки перехода, добавляет выбор ответов цифрами (1-9) и отправку по Enter.
+// @author       sanbobsan
 // @match        *://*.basealt.ru/*
 // @grant        none
 // @downloadURL  https://raw.githubusercontent.com/sanbob-vault/easy-kurs-basealt/refs/heads/main/script.user.js
@@ -12,74 +13,93 @@
 (function() {
     'use strict';
 
-    function fixNextButton() {
-        // --- 1. БЛОК КНОПКИ SUBMIT ---
+    // 1. Выносим стили в отдельный блок. Браузеру проще применять классы, чем инлайн-стили в цикле.
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .fixed-btn-submit {
+            position: fixed !important;
+            top: 15px !important;
+            right: 15px !important;
+            z-index: 999999 !important;
+            background-color: #007bff !important;
+            color: #ffffff !important;
+            padding: 14px 30px !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+            border: 2px solid #0056b3 !important;
+            border-radius: 5px !important;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5) !important;
+            cursor: pointer !important;
+        }
+        .fixed-btn-continue {
+            position: fixed !important;
+            top: 15px !important;
+            z-index: 999998 !important;
+            background-color: #28a745 !important;
+            color: #ffffff !important;
+            padding: 14px 30px !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+            border: 2px solid #1e7e34 !important;
+            border-radius: 5px !important;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5) !important;
+            cursor: pointer !important;
+        }
+        .script-number {
+            color: #dc3545;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Массив целевых текстов кнопок для удобного масштабирования
+    const targetTexts = ['далее', 'continue', "yes, i'd like to try again"];
+
+    function fixUI() {
+        // --- БЛОК КНОПКИ SUBMIT ---
         const submitButton = document.getElementById('id_submitbutton');
-        let hasSubmit = false;
-
-        if (submitButton) {
-            hasSubmit = true;
-            if (submitButton.style.position !== 'fixed') {
-                submitButton.style.position = 'fixed';
-                submitButton.style.top = '15px';
-                submitButton.style.right = '15px';
-                submitButton.style.zIndex = '999999';
-
-                submitButton.style.backgroundColor = '#007bff';
-                submitButton.style.color = '#ffffff';
-                submitButton.style.padding = '14px 30px';
-                submitButton.style.fontSize = '18px';
-                submitButton.style.fontWeight = 'bold';
-                submitButton.style.border = '2px solid #0056b3';
-                submitButton.style.borderRadius = '5px';
-                submitButton.style.boxShadow = '0 5px 25px rgba(0,0,0,0.5)';
-                submitButton.style.cursor = 'pointer';
-            }
+        if (submitButton && !submitButton.classList.contains('fixed-btn-submit')) {
+            submitButton.classList.add('fixed-btn-submit');
         }
 
-        // --- 2. БЛОК КНОПОК ДАЛЕЕ / CONTINUE / TRY AGAIN ---
-        const buttons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
-
-        buttons.forEach(button => {
+        // --- БЛОК КНОПОК ДАЛЕЕ / CONTINUE / TRY AGAIN ---
+        const continueButtons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
+        
+        continueButtons.forEach(button => {
             const text = button.textContent.trim().toLowerCase();
-
-            // Добавили проверку точного текста новой кнопки в условие
-            if (text === 'далее' || text === 'continue' || text === "yes, i'd like to try again") {
-                const targetRight = hasSubmit ? '170px' : '15px';
-
-                if (button.style.position !== 'fixed' || button.style.right !== targetRight) {
-                    button.style.position = 'fixed';
-                    button.style.top = '15px';
-                    button.style.right = targetRight;
-                    button.style.zIndex = '999998';
-
-                    button.style.backgroundColor = '#28a745';
-                    button.style.color = '#ffffff';
-                    button.style.padding = '14px 30px';
-                    button.style.fontSize = '18px';
-                    button.style.fontWeight = 'bold';
-                    button.style.border = '2px solid #1e7e34';
-                    button.style.borderRadius = '5px';
-                    button.style.boxShadow = '0 5px 25px rgba(0,0,0,0.5)';
-                    button.style.cursor = 'pointer';
+            
+            if (targetTexts.includes(text)) {
+                if (!button.classList.contains('fixed-btn-continue')) {
+                    button.classList.add('fixed-btn-continue');
                 }
+                // Динамическое позиционирование в зависимости от наличия кнопки Submit
+                button.style.right = submitButton ? '170px' : '15px';
             }
         });
 
-        // --- 3. ИСХОДНЫЙ РАБОЧИЙ БЛОК НУМЕРАЦИИ ВАРИАНТОВ ---
+        // --- БЛОК НУМЕРАЦИИ ВАРИАНТОВ ---
         const labels = document.querySelectorAll('.answeroption label.form-check-label');
         labels.forEach((label, index) => {
-            if (!label.innerHTML.includes('class="script-number"')) {
+            // Используем querySelector вместо проверки строкового innerHTML (работает быстрее и точнее)
+            if (!label.querySelector('.script-number')) {
                 const pTag = label.querySelector('p');
                 if (pTag) {
-                    pTag.insertAdjacentHTML('afterbegin', `<span class="script-number" style="color: #dc3545; font-weight: bold; margin-right: 8px;">[${index + 1}]</span> `);
+                    pTag.insertAdjacentHTML('afterbegin', `<span class="script-number">[${index + 1}]</span> `);
                 }
             }
         });
     }
 
-    // --- 4. БЛОК ГОРЯЧИХ КЛАВИШ ---
+    // --- БЛОК ГОРЯЧИХ КЛАВИШ ---
     window.addEventListener('keydown', function(event) {
+        // ЗАЩИТА: Игнорируем нажатия, если фокус находится в текстовом поле или редакторе
+        const tag = event.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || event.target.isContentEditable) {
+            return;
+        }
+
+        // Обработка цифр 1-9
         if (event.key >= '1' && event.key <= '9') {
             const index = parseInt(event.key, 10) - 1;
             const radioButtons = document.querySelectorAll('.answeroption input[type="radio"]');
@@ -90,6 +110,7 @@
             }
         }
 
+        // Обработка Enter
         if (event.key === 'Enter') {
             const submitButton = document.getElementById('id_submitbutton');
             if (submitButton) {
@@ -97,19 +118,22 @@
                 return;
             }
 
-            const buttons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
-            for (let i = 0; i < buttons.length; i++) {
-                const text = buttons[i].textContent.trim().toLowerCase();
-                // Сюда тоже добавили обработку нажатия Enter для новой кнопки
-                if (text === 'далее' || text === 'continue' || text === "yes, i'd like to try again") {
-                    buttons[i].click();
+            const continueButtons = document.querySelectorAll('form[action*="continue.php"] button[type="submit"], form[action*="view.php"] button[type="submit"]');
+            for (const button of continueButtons) {
+                if (targetTexts.includes(button.textContent.trim().toLowerCase())) {
+                    button.click();
                     break;
                 }
             }
         }
     });
 
-    // Проверяем страницу каждые 300мс
-    fixNextButton();
-    setInterval(fixNextButton, 300);
+    // Первичный запуск
+    fixUI();
+
+    // Вместо setInterval используем MutationObserver
+    // Следит за изменениями DOM и вызывает функцию только при реальной перерисовке интерфейса (например, подгрузке ajax-ом)
+    const observer = new MutationObserver(() => fixUI());
+    observer.observe(document.body, { childList: true, subtree: true });
+
 })();
