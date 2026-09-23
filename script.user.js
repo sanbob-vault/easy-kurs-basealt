@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Easy Kurs BaseALT
 // @namespace    http://tampermonkey.net
-// @version      3.7
+// @version      3.8
 // @description  Улучшает навигацию на kurs.basealt.ru: закрепляет кнопки, выбор ответов (1-9), авто-пропуск теории (Shift+Enter) до появления вопросов.
 // @author       sanbobsan
 // @match        *://*.basealt.ru/*
@@ -56,7 +56,7 @@
     `;
     document.head.appendChild(style);
 
-    const targetTexts = ['далее', 'continue', "yes, i'd like to try again", "продолжить", "да, мне хотелось бы попробовать еще раз"];
+    const targetTexts = ['далее', 'continue', "yes, i'd like to try again", "продолжить", "да, мне хотелось бы попробовать еще раз", "следующий вопрос"];
 
     // Предохранитель (убиваем флаг автоскипа через 3 секунды простоя, чтобы не зависнуть, если кнопок нет)
     let autoSkipTimeout = null;
